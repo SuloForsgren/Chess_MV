@@ -14,77 +14,59 @@ def order_corners(pts):
     rect[3] = pts[np.argmax(diff)]  # bottom-left
 
     return rect
-board_img = "img/second.jpg"
+
+largest_square = None
+
+board_img = "img/my2.jpg"
 img = cv.imread(board_img)
+img = cv.resize(img, (800, int(img.shape[0] * 800 / img.shape[1])))
+
 gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 blur = cv.GaussianBlur(gray_img, (5,5), 0)
 edges = cv.Canny(blur, 50, 150)
 
+#resized_image = cv.resize(edges, (600,600))
+#cv.imshow("Detected Chessboard", resized_image)
+#cv.waitKey(0)
+
 contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
-for point in contours:
-    approx = cv.approxPolyDP(point, 0.02 * cv.arcLength(point, True), True)
+largest_square = max(contours, key=cv.contourArea)
 
-    if len(approx) == 4 :
-        area = cv.contourArea(point)
-        if area < 1000 : 
-            continue
+rect = cv.minAreaRect(largest_square)
+box = cv.boxPoints(rect)
+box = box.astype("float32")
 
-        corners = approx.reshape(4,2)
-        ordered_corners = order_corners(corners)
+ordered_box = order_corners(box)
 
-        (tl, tr, br, bl) = ordered_corners
-        width_top = np.linalg.norm(tl - tr)
-        width_bot = np.linalg.norm(bl-br)
-        height_left = np.linalg.norm(tl-bl)
-        height_right = np.linalg.norm(tr-br)
+widthA = np.linalg.norm(ordered_box[2] - ordered_box[3])
+widthB = np.linalg.norm(ordered_box[1] - ordered_box[0])
+maxWidth = max(int(widthA), int(widthB))
 
-        max_width = int(max(width_top, width_bot))
-        max_height = int(max(height_left, height_right))
+heightA = np.linalg.norm(ordered_box[1] - ordered_box[2])
+heightB = np.linalg.norm(ordered_box[0] - ordered_box[3])
+maxHeight = max(int(heightA), int(heightB))
 
-        aspect_ratio = float(max_width) / max_height
+dst_corners = np.array([
+    [0, 0],  # Top-left corner
+    [maxWidth - 1, 0],  # Top-right corner
+    [maxWidth - 1, maxHeight - 1],  # Bottom-right corner
+    [0, maxHeight - 1]  # Bottom-left corner
+], dtype="float32")
 
+img_with_contours = edges.copy()
 
-        if 0.9 < aspect_ratio < 1.1 :
-            largest_square = ordered_corners
-            break
-            
+matrix = cv.getPerspectiveTransform(ordered_box, dst_corners)
+warped = cv.warpPerspective(img, matrix, (maxWidth, maxHeight))
 
-if largest_square is not None:
-    dst_corners = np.array([
-        [0, 0],  # Top-left corner
-        [max_width - 1, 0],  # Top-right corner
-        [max_width - 1, max_height - 1],  # Bottom-right corner
-        [0, max_height - 1]  # Bottom-left corner
-    ], dtype="float32")
+img_contours_gray = img.copy()
+#cv.drawContours(img_contours_gray, contours, -1, (255, 0, 0), 2)
+cv.polylines(img_contours_gray, [box.astype(int)], isClosed=True, color=(0, 255, 0), thickness=3)
 
-    img_with_contours = edges.copy()
+cv.imshow("Detected Chessboard Corners", img_contours_gray)
+cv.imshow("Warped Chessboard", warped)
+cv.waitKey(0)
+cv.destroyAllWindows()
 
-    matrix = cv.getPerspectiveTransform(largest_square, dst_corners)
-    warped = cv.warpPerspective(img, matrix, (max_width, max_height))
-
-    cv.imshow("Detected Chessboard", img_with_contours)
-    cv.waitKey(0)
-    cv.imshow("Detected Chessboard", warped)
-    cv.waitKey(0)
-
-    square_size = warped.shape[0] // 8
-
-    for row in range(8) :
-        for col in range(8) :
-            x_start = col * square_size
-            y_start = row * square_size
-            x_end = (col + 1) * square_size
-            y_end = (row + 1) * square_size
-
-            grid_cell = warped[y_start:y_end, x_start:x_end]
-            cv.rectangle(warped, (x_start, y_start), (x_end, y_end), (0, 255, 0), 2)
-
-
-    resized_image = cv.resize(warped, (600,600))
-    cv.imshow("Detected Chessboard", resized_image)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
-
-else :
-    print("No valid squares found")
+print("Chessboard corner points (ordered):")
+print(ordered_box)
