@@ -148,13 +148,24 @@ def main():
 
     # Cell detection
     cells = extract_cells(warped)
+    piece_array = []
 
+    # Check if playing from left to right or from bot to top 
     for index, cell in enumerate(cells):
         if detect_piece(cell) :
             print(f"Cell{index} has a piece!")
-        #else:
-            #print(f"Cell{index} is empty!")
+            if index == 3 or index == 4:
+                piece_array.append(True)
+        else:
+            if index == 3 or index == 4:
+                piece_array.append(False)
 
+    if piece_array[0] == True and piece_array[1] == True :
+        print("Bot to Top!")
+    elif piece_array[0] == False and piece_array[1] == False :
+        print("Left to Right!")
+    else:
+        exit    # Make raise error later
 
     chess_detection.main()
 
