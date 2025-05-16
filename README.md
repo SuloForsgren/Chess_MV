@@ -11,7 +11,7 @@ This system is designed to automate board recognition and move tracking for casu
 <table>
 <tr>
 <td><img src="img/start.jpg" width="300"/><br><b>Original Board View</b></td>
-<td><img src="img/start_position.jpg" width="300"/><br><b>Warped & Aligned View</b></td>
+<td><img src="img/start_position.png" width="300"/><br><b>Warped & Aligned View</b></td>
 </tr>
 </table>
 
