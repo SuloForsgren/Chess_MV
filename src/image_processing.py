@@ -68,7 +68,7 @@ def extract_cells(warped):
     return cells
 
 def main():
-    board_img = "img/origin.jpg"
+    board_img = "img/start.jpg" # Define the image
     img, edges = preprocess_image(board_img)
 
     # Finds contours of the chessboard likely the play area or whole chessboard borders
