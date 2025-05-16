@@ -1,3 +1,4 @@
+import chess_detection
 import numpy as np
 import cv2 as cv
 from matplotlib import pyplot as plt
@@ -67,6 +68,31 @@ def extract_cells(warped):
 
     return cells
 
+# Detect pieces from cells by counting pixel color difference
+def detect_piece(cell):
+    crop_ratio = 0.5
+    diff_threshold = 20
+    percent_threshold = 0.1
+
+    gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
+
+    h, w = gray.shape
+    cx, cy = w // 2, h // 2
+    half_crop_w, half_crop_h = int(w * crop_ratio / 2), int(h * crop_ratio / 2)
+    center_crop = gray[cy - half_crop_h:cy + half_crop_h, cx - half_crop_w:cx + half_crop_w]
+    
+    # Find dominant pixel intensity (median)
+    dominant_value = np.median(center_crop)
+
+    # Calculate difference from dominant value for each pixel
+    diff = np.abs(center_crop.astype(int) - int(dominant_value))
+    count_diff_pixels = np.sum(diff > diff_threshold)       # Count pixels that differ from the threshold
+    percent_diff = count_diff_pixels / center_crop.size     # Calculate percentage of differing pixels
+
+    return percent_diff > percent_threshold
+
+
+
 def main():
     board_img = "img/start.jpg" # Define the image
     img, edges = preprocess_image(board_img)
@@ -114,18 +140,23 @@ def main():
     # Show the image with drawn contours and wait user input to close all windows
     cv.imshow("Detected Chessboard Corners", img_contours_gray)
     cv.imshow("Warped Chessboard", warped_with_grid)
-    cv.waitKey(0)
+    #cv.waitKey(0)  # Comment out to skip showing images 
     cv.destroyAllWindows()
 
     print("Chessboard corner points (ordered):")
     print(ordered_box)
 
-
+    # Cell detection
     cells = extract_cells(warped)
 
-    cv.imshow("Cell (0,0)", cells[0])
-    cv.waitKey(0)
-    cv.destroyAllWindows()
+    for index, cell in enumerate(cells):
+        if detect_piece(cell) :
+            print(f"Cell{index} has a piece!")
+        #else:
+            #print(f"Cell{index} is empty!")
+
+
+    chess_detection.main()
 
 if __name__ == "__main__":
     main()
