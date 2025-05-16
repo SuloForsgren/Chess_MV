@@ -150,7 +150,8 @@ def main():
     cells = extract_cells(warped)
     piece_array = []
 
-    # Check if playing from left to right or from bot to top 
+    # Check if playing from left to right or from bot to top
+    # Can be used later again for move checks
     for index, cell in enumerate(cells):
         if detect_piece(cell) :
             print(f"Cell{index} has a piece!")
