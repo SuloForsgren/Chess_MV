@@ -58,65 +58,85 @@ def main():
 
     while True:
         ret, frame = capture.read()
-        if not ret or frame == None or frame.size == 0:
+        if not ret or frame is None or frame.size == 0:
             print("Failed to grab frame.")
             break
 
-        
-        # Resize to a fixed width
-        img = cv.resize(frame, (800, int(frame.shape[0] * 800 / frame.shape[1])))
-        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-        blur = cv.GaussianBlur(gray, (5, 5), 0)
-        edges = cv.Canny(blur, 50, 150)
+        try :
+            cv.imshow("Live", frame)
+            key = cv.waitKey(1) & 0xFF
+            if key == ord('q'):
+                break
+            # Resize to a fixed width
+            img = cv.resize(frame, (800, int(frame.shape[0] * 800 / frame.shape[1])))
+            gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+            blur = cv.GaussianBlur(gray, (5, 5), 0)
+            edges = cv.Canny(blur, 50, 150)
 
-        # Debug
-        cv.imshow("Show the edges for debugging", edges)
+            # Debug
+            cv.imshow("Show the edges for debugging", edges)
 
-        contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        
+            contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            
 
-        suitable_corners = []
-        for cnt in contours :
-            peri = cv.arcLength(cnt, True)
-            approx = cv.approxPolyDP(cnt, 0.02 * peri, True)
+            suitable_corners = []
+            for cnt in contours :
+                peri = cv.arcLength(cnt, True)
+                approx = cv.approxPolyDP(cnt, 0.02 * peri, True)
 
-            if len(approx) == 4:
-                quad = approx.reshape(4, 2)
-                area = cv.contourArea(quad)
-                suitable_corners.append((area, quad))
+                if len(approx) == 4:
+                    quad = approx.reshape(4, 2)
+                    area = cv.contourArea(quad)
+                    suitable_corners.append((area, quad))
+            
+            # Just an error check --> If no suitable corners go back to beginning and searh again without raisin ValueError
+            if not suitable_corners:
+                continue
 
-        _, board_quad = max(suitable_corners, key=lambda x: x[0])
-        board_quad = board_quad.astype("float32")
+            _, board_quad = max(suitable_corners, key=lambda x: x[0])
+            board_quad = board_quad.astype("float32")
 
-        ordered_corners = order_corners(board_quad)
+            ordered_corners = order_corners(board_quad)
 
-        wA = np.linalg.norm(ordered_corners[2] - ordered_corners[3])
-        wB = np.linalg.norm(ordered_corners[1] - ordered_corners[0])
-        maxW = max(int(wA), int(wB))
+            wA = np.linalg.norm(ordered_corners[2] - ordered_corners[3])
+            wB = np.linalg.norm(ordered_corners[1] - ordered_corners[0])
+            maxW = max(int(wA), int(wB))
 
-        hA = np.linalg.norm(ordered_corners[1] - ordered_corners[2])
-        hB = np.linalg.norm(ordered_corners[0] - ordered_corners[3])
-        maxH = max(int(hA), int(hB))
+            hA = np.linalg.norm(ordered_corners[1] - ordered_corners[2])
+            hB = np.linalg.norm(ordered_corners[0] - ordered_corners[3])
+            maxH = max(int(hA), int(hB))
 
-        dst = np.array([
-            [0, 0],
-            [maxW - 1, 0],
-            [maxW - 1, maxH - 1],
-            [0, maxH - 1]
-        ], dtype="float32")
+            print(f"Max Width: {maxW}\nMax Height: {maxH}")
+            if maxW <= 0 or maxH <= 0: 
+                continue
+            else :
+                valid_square = maxW / maxH
 
-        M = cv.getPerspectiveTransform(ordered_corners, dst)
-        warped = cv.warpPerspective(img, M, (maxW, maxH))
+            if maxH < 440 and maxW < 440 or not (0.9 < valid_square < 1.1) :
+                continue
+            else :
+                dst = np.array([
+                    [0, 0],
+                    [maxW - 1, 0],
+                    [maxW - 1, maxH - 1],
+                    [0, maxH - 1]
+                ], dtype="float32")
 
-        warped_with_grid = draw_grid(warped.copy(), rows=8, cols=8)
+                M = cv.getPerspectiveTransform(ordered_corners, dst)
+                warped = cv.warpPerspective(img, M, (maxW, maxH))
 
-        debug_vis = img.copy()
-        cv.polylines(debug_vis, [ordered_corners.astype(int)], True, (0, 255, 0), 3)
-        cv.imshow("Original image with board outline", debug_vis)
+                warped_with_grid = draw_grid(warped.copy(), rows=8, cols=8)
 
-        cv.imshow("Warped image", warped_with_grid)
-        if cv.waitKey(1) & 0xFF == ord('s'):
-            break
+                debug_vis = img.copy()
+                cv.polylines(debug_vis, [ordered_corners.astype(int)], True, (0, 255, 0), 3)
+                cv.imshow("Original image with board outline", debug_vis)
+
+                cv.imshow("Warped image", warped_with_grid)
+                if cv.waitKey(1) & 0xFF == ord('s'):
+                    break
+        except():
+            print("An exception occurred..\nPlease try again!")
+            continue
 
     capture.release()
     cv.destroyAllWindows()
