@@ -72,9 +72,12 @@ def extract_cells(warped):
 def detect_piece(cell):
     crop_ratio = 0.5
     diff_threshold = 20
-    percent_threshold = 0.1
+    percent_threshold = 0.15
 
     gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
+
+    #cv.imshow("gray piece", gray)
+    #cv.waitKey(0)
 
     h, w = gray.shape
     cx, cy = w // 2, h // 2
@@ -91,10 +94,14 @@ def detect_piece(cell):
 
     return percent_diff > percent_threshold
 
-
+def detect_start_pos(piece_array):
+    if piece_array[0] == True and piece_array[1] == True :
+        return False
+    elif piece_array[0] == False and piece_array[1] == False :
+        return True
 
 def main():
-    board_img = "img/start.jpg" # Define the image
+    board_img = "img/start2.jpg" # Define the image
     img, edges = preprocess_image(board_img)
 
     # Finds contours of the chessboard likely the play area or whole chessboard borders
@@ -143,9 +150,6 @@ def main():
     #cv.waitKey(0)  # Comment out to skip showing images 
     cv.destroyAllWindows()
 
-    print("Chessboard corner points (ordered):")
-    print(ordered_box)
-
     # Cell detection
     cells = extract_cells(warped)
     piece_array = []
@@ -153,22 +157,38 @@ def main():
     # Check if playing from left to right or from bot to top
     # Can be used later again for move checks
     for index, cell in enumerate(cells):
-        if detect_piece(cell) :
-            print(f"Cell{index} has a piece!")
+        if detect_piece(cell):
             if index == 3 or index == 4:
                 piece_array.append(True)
         else:
             if index == 3 or index == 4:
                 piece_array.append(False)
 
-    if piece_array[0] == True and piece_array[1] == True :
-        print("Bot to Top!")
-    elif piece_array[0] == False and piece_array[1] == False :
-        print("Left to Right!")
-    else:
-        exit    # Make raise error later
+    # Detect if board is set from left to right or bot to top then rotate the image
+    # left-right = True, bot-top = False 
+    if detect_start_pos(piece_array) :
+        print("R\nO\nT\nA\nT\nE\n")
+        rotated = cv.rotate(warped, cv.ROTATE_90_CLOCKWISE)
+        cells = extract_cells(rotated)
+        
 
-    chess_detection.main()
+    piece_array.clear()
+    for index, cell in enumerate(cells):
+        if detect_piece(cell):
+            piece_array.append(True)
+            print("True")
+        else:
+            piece_array.append(False)
+            print("False")
+
+
+    # Use chess_logic class to create an object for the board 
+    chess = chess_detection.chess_logic()
+    if chess.check_board(piece_array):     # Check current board status
+        print("Everything is fine!")
+    else :
+        print("Pieces at wrong places.")
+
 
 if __name__ == "__main__":
     main()
