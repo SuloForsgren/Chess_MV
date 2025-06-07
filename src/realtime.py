@@ -1,4 +1,4 @@
-import chess_detection
+#import chess_detection
 import numpy as np
 import cv2 as cv
 from matplotlib import pyplot as plt
@@ -28,6 +28,7 @@ def preprocess_image(board_img):
 
     return img, edges
 
+
 # Draws 8x8(64 squares) grid to the chessboard image
 def draw_grid(img, rows=8, cols=8, color=(0, 255, 0), thickness=2):
     h, w = img.shape[:2]
@@ -46,58 +47,6 @@ def draw_grid(img, rows=8, cols=8, color=(0, 255, 0), thickness=2):
 
     return img
 
-# Extract cells to an array for future use
-def extract_cells(warped):
-    rows = 8
-    cols = 8
-    h, w = warped.shape[:2]
-    
-    cell_height = h // rows
-    cell_width = w // cols 
-    cells = []
-
-    for row in range(rows):
-        for col in range(cols):
-            y1 = row * cell_height
-            y2 = (row + 1) * cell_height
-            x1 = col * cell_width
-            x2 = (col + 1) * cell_width
-            cell = warped[y1:y2, x1:x2]
-            cells.append(cell)
-
-    return cells
-
-# Detect pieces from cells by counting pixel color difference
-def detect_piece(cell):
-    crop_ratio = 0.5
-    diff_threshold = 20
-    percent_threshold = 0.15
-
-    gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
-
-    #cv.imshow("gray piece", gray)
-    #cv.waitKey(0)
-
-    h, w = gray.shape
-    cx, cy = w // 2, h // 2
-    half_crop_w, half_crop_h = int(w * crop_ratio / 2), int(h * crop_ratio / 2)
-    center_crop = gray[cy - half_crop_h:cy + half_crop_h, cx - half_crop_w:cx + half_crop_w]
-    
-    # Find dominant pixel intensity (median)
-    dominant_value = np.median(center_crop)
-
-    # Calculate difference from dominant value for each pixel
-    diff = np.abs(center_crop.astype(int) - int(dominant_value))
-    count_diff_pixels = np.sum(diff > diff_threshold)       # Count pixels that differ from the threshold
-    percent_diff = count_diff_pixels / center_crop.size     # Calculate percentage of differing pixels
-
-    return percent_diff > percent_threshold
-
-def detect_start_pos(piece_array):
-    if piece_array[0] == True and piece_array[1] == True :
-        return False
-    elif piece_array[0] == False and piece_array[1] == False :
-        return True
 
 def main():
     cam_index = 0
@@ -109,28 +58,68 @@ def main():
 
     while True:
         ret, frame = capture.read()
-        if not ret:
+        if not ret or frame == None or frame.size == 0:
             print("Failed to grab frame.")
             break
 
         
-        img, edges = preprocess_image(frame)
-        cv.imshow('Webcam Feed', edges)
-        # Finds contours of the chessboard likely the play area or whole chessboard borders
-        contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        if len(contours) == 0:
-            print("No contours")
-            break
-        else:
-            print(f"{contours}")
-            # 1) pick the “largest” contour
-            largest_idx = np.argmax([cv.contourArea(c) for c in contours])
-            board_contour = contours[largest_idx]
+        # Resize to a fixed width
+        img = cv.resize(frame, (800, int(frame.shape[0] * 800 / frame.shape[1])))
+        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        blur = cv.GaussianBlur(gray, (5, 5), 0)
+        edges = cv.Canny(blur, 50, 150)
 
-            # 2) visualize it on the edges (or on the color image) to confirm
-            debug_vis = cv.cvtColor(edges, cv.COLOR_GRAY2BGR)
-            cv.drawContours(debug_vis, contours, largest_idx, (0,0,255), 2)
-            cv.imshow("Which Contour Was Chosen?", debug_vis)
+        # Debug
+        cv.imshow("Show the edges for debugging", edges)
+
+        contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        
+
+        suitable_corners = []
+        for cnt in contours :
+            peri = cv.arcLength(cnt, True)
+            approx = cv.approxPolyDP(cnt, 0.02 * peri, True)
+
+            if len(approx) == 4:
+                quad = approx.reshape(4, 2)
+                area = cv.contourArea(quad)
+                suitable_corners.append((area, quad))
+
+        _, board_quad = max(suitable_corners, key=lambda x: x[0])
+        board_quad = board_quad.astype("float32")
+
+        ordered_corners = order_corners(board_quad)
+
+        wA = np.linalg.norm(ordered_corners[2] - ordered_corners[3])
+        wB = np.linalg.norm(ordered_corners[1] - ordered_corners[0])
+        maxW = max(int(wA), int(wB))
+
+        hA = np.linalg.norm(ordered_corners[1] - ordered_corners[2])
+        hB = np.linalg.norm(ordered_corners[0] - ordered_corners[3])
+        maxH = max(int(hA), int(hB))
+
+        dst = np.array([
+            [0, 0],
+            [maxW - 1, 0],
+            [maxW - 1, maxH - 1],
+            [0, maxH - 1]
+        ], dtype="float32")
+
+        M = cv.getPerspectiveTransform(ordered_corners, dst)
+        warped = cv.warpPerspective(img, M, (maxW, maxH))
+
+        warped_with_grid = draw_grid(warped.copy(), rows=8, cols=8)
+
+        debug_vis = img.copy()
+        cv.polylines(debug_vis, [ordered_corners.astype(int)], True, (0, 255, 0), 3)
+        cv.imshow("Original image with board outline", debug_vis)
+
+        cv.imshow("Warped image", warped_with_grid)
+        if cv.waitKey(1) & 0xFF == ord('s'):
+            break
+
+    capture.release()
+    cv.destroyAllWindows()
 
 
 
