@@ -91,7 +91,7 @@ def main():
             if largest_quad is None:
                 print("No board found.")
                 continue
-            if is_blurry(frame, 40):
+            if is_blurry(frame, 90):
                 print("Waiting for camera to focus...")
                 continue
             else:
@@ -166,13 +166,8 @@ def main():
     # Start detecting the pieces (cd = chess_detection.py)
     chess_helper = cd.chess_logic()
     while True:
-        chess_helper.check_board()
-        break
-
-
-
-
-            
+        chess_helper.check_board(squares)
+        
 
     capture.release()
     cv.destroyAllWindows()
