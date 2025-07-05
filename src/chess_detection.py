@@ -16,7 +16,7 @@ class chess_logic:
                 # Convert to grayscale
                 gray = cv.cvtColor(square_img, cv.COLOR_BGR2GRAY)
 
-                # ⬇️ Focus only on center of the square to avoid borders
+                # Focus only on center of the square to avoid borders
                 h, w = gray.shape
                 margin = int(min(h, w) * 0.25)
                 cropped = gray[margin:h - margin, margin:w - margin]
@@ -29,13 +29,9 @@ class chess_logic:
                 edge_pixels = cv.countNonZero(edges)
 
                 # Combined heuristic (tuneable thresholds)
-                has_piece = std_dev > 10 or edge_pixels > 20
+                has_piece = std_dev > 9 or edge_pixels > 19
 
                 piece_presence.append(has_piece)
-
-                # Optional: debug per square
-                square_name = f"{chr(97 + col)}{8 - row}"
-                print(f"{square_name}: std={std_dev:.1f}, edges={edge_pixels}, piece={has_piece}")
 
         self.print_board_presence(piece_presence)
 

@@ -167,6 +167,7 @@ def main():
     chess_helper = cd.chess_logic()
     while True:
         chess_helper.check_board(squares)
+        break
         
 
     capture.release()
