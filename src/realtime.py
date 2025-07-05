@@ -1,5 +1,6 @@
 import numpy as np
 import cv2 as cv
+import chess_detection as cd
 
 def order_corners(pts):
     rect = np.zeros((4, 2), dtype="float32")
@@ -43,6 +44,12 @@ def draw_grid(img, rows=8, cols=8, color=(0, 255, 0), thickness=2):
         cv.line(img, (0, y), (w, y), color, thickness)
     return img
 
+def is_blurry(image, threshold):
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    lap = cv.Laplacian(gray, cv.CV_64F).var()
+    print(lap)
+    return lap < threshold
+
 def main():
     cam_index = 0
     capture = cv.VideoCapture(cam_index)
@@ -50,19 +57,17 @@ def main():
     if not capture.isOpened():
         print("Error: Cannot access webcam.")
         return
-
-    once = False
+    
     while True:
         ret, frame = capture.read()
         if not ret or frame is None or frame.size == 0:
             print("Failed to grab frame.")
-            break
+            
 
         try:
             cv.imshow("Live", frame)
             key = cv.waitKey(1) & 0xFF
-            if key == ord('q'):
-                break
+
 
             img, dilated = preprocess_image(frame)
             contours, _ = cv.findContours(dilated, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
@@ -75,6 +80,10 @@ def main():
                 approx = cv.approxPolyDP(cnt, 0.02 * peri, True)
                 if len(approx) == 4 and cv.isContourConvex(approx):
                     area = cv.contourArea(approx)
+
+                    if area < 100000:
+                        continue
+
                     if area > max_area:
                         max_area = area
                         largest_quad = approx.reshape(4, 2)
@@ -82,77 +91,84 @@ def main():
             if largest_quad is None:
                 print("No board found.")
                 continue
+            if is_blurry(frame, 90):
+                print("Waiting for camera to focus...")
+                continue
+            else:
+                ordered_corners = order_corners(largest_quad)
+                play_area_corners = inset_quad(ordered_corners, 0.15, 0.13)
 
-            ordered_corners = order_corners(largest_quad)
-            play_area_corners = inset_quad(ordered_corners, 0.15, 0.13)
+                debug_vis = img.copy()
+                cv.polylines(debug_vis, [ordered_corners.astype(int)], True, (0, 255, 0), 2)  # outer
+                cv.polylines(debug_vis, [play_area_corners.astype(int)], True, (0, 0, 255), 2)  # shrunk
+                cv.imshow("Board Outline (Green=Full, Red=Play Area)", debug_vis)
 
-            debug_vis = img.copy()
-            cv.polylines(debug_vis, [ordered_corners.astype(int)], True, (0, 255, 0), 2)  # outer
-            cv.polylines(debug_vis, [play_area_corners.astype(int)], True, (0, 0, 255), 2)  # shrunk
-            cv.imshow("Board Outline (Green=Full, Red=Play Area)", debug_vis)
+                # Warp to top-down square
+                wA = np.linalg.norm(play_area_corners[2] - play_area_corners[3])
+                wB = np.linalg.norm(play_area_corners[1] - play_area_corners[0])
+                maxW = max(int(wA), int(wB))
 
-            # Warp to top-down square
-            wA = np.linalg.norm(play_area_corners[2] - play_area_corners[3])
-            wB = np.linalg.norm(play_area_corners[1] - play_area_corners[0])
-            maxW = max(int(wA), int(wB))
+                hA = np.linalg.norm(play_area_corners[1] - play_area_corners[2])
+                hB = np.linalg.norm(play_area_corners[0] - play_area_corners[3])
+                maxH = max(int(hA), int(hB))
 
-            hA = np.linalg.norm(play_area_corners[1] - play_area_corners[2])
-            hB = np.linalg.norm(play_area_corners[0] - play_area_corners[3])
-            maxH = max(int(hA), int(hB))
+                max_dim = max(maxW, maxH)
+                dst = np.array([
+                    [0, 0],
+                    [max_dim - 1, 0],
+                    [max_dim - 1, max_dim - 1],
+                    [0, max_dim - 1]
+                ], dtype="float32")
 
-            max_dim = max(maxW, maxH)
-            dst = np.array([
-                [0, 0],
-                [max_dim - 1, 0],
-                [max_dim - 1, max_dim - 1],
-                [0, max_dim - 1]
-            ], dtype="float32")
+                M = cv.getPerspectiveTransform(play_area_corners, dst)
+                warped = cv.warpPerspective(img, M, (max_dim, max_dim))
 
-            M = cv.getPerspectiveTransform(play_area_corners, dst)
-            warped = cv.warpPerspective(img, M, (max_dim, max_dim))
+                warped_with_grid = draw_grid(warped.copy(), rows=8, cols=8)
+                cv.imshow("Warped Chessboard", warped_with_grid)
 
-            warped_with_grid = draw_grid(warped.copy(), rows=8, cols=8)
-            cv.imshow("Warped Chessboard", warped_with_grid)
+                # Get squares and annotate
+                h, w = warped.shape[:2]
+                x_edges = np.linspace(0, w, 9, dtype=int)
+                y_edges = np.linspace(0, h, 9, dtype=int)
 
-            # Get squares and annotate
-            h, w = warped.shape[:2]
-            x_edges = np.linspace(0, w, 9, dtype=int)
-            y_edges = np.linspace(0, h, 9, dtype=int)
+                squares = []
+                for row in range(8):
+                    row_squares = []
+                    for col in range(8):
+                        x1, x2 = x_edges[col], x_edges[col + 1]
+                        y1, y2 = y_edges[row], y_edges[row + 1]
+                        square = warped[y1:y2, x1:x2]
+                        row_squares.append(square)
+                    squares.append(row_squares)
 
-            squares = []
-            for row in range(8):
-                row_squares = []
-                for col in range(8):
-                    x1, x2 = x_edges[col], x_edges[col + 1]
-                    y1, y2 = y_edges[row], y_edges[row + 1]
-                    square = warped[y1:y2, x1:x2]
-                    row_squares.append(square)
-                squares.append(row_squares)
+                annotated = warped.copy()
+                for row in range(8):
+                    for col in range(8):
+                        x1, x2 = x_edges[col], x_edges[col + 1]
+                        y1, y2 = y_edges[row], y_edges[row + 1]
+                        square_name = f"{chr(97 + col)}{8 - row}"
+                        cv.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 1)
+                        cv.putText(annotated, square_name, (x1 + 5, y1 + 15),
+                                cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                
+                cv.imshow("Annotated Chessboard", annotated)
 
-            if not once:
-                once = True
-                for row in squares:
-                    for sq in row:
-                        print(sq.shape)
+                if cv.waitKey(1) & 0xFF == ord('s'):
+                    break
 
-            annotated = warped.copy()
-            for row in range(8):
-                for col in range(8):
-                    x1, x2 = x_edges[col], x_edges[col + 1]
-                    y1, y2 = y_edges[row], y_edges[row + 1]
-                    square_name = f"{chr(97 + col)}{8 - row}"
-                    cv.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 1)
-                    cv.putText(annotated, square_name, (x1 + 5, y1 + 15),
-                               cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+            break
 
-            cv.imshow("Annotated Chessboard", annotated)
-
-            if cv.waitKey(1) & 0xFF == ord('s'):
-                break
 
         except Exception as e:
             print("An exception occurred:", e)
             continue
+        
+    # Start detecting the pieces (cd = chess_detection.py)
+    chess_helper = cd.chess_logic()
+    while True:
+        chess_helper.check_board(squares)
+        break
+        
 
     capture.release()
     cv.destroyAllWindows()
