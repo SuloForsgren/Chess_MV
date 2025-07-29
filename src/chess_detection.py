@@ -32,7 +32,7 @@ class chess_logic:
                 edges = cv.Canny(gray, 50, 150)
                 edge_pixels = cv.countNonZero(edges)
 
-                has_piece = std_dev > 15 or edge_pixels > 24
+                has_piece = std_dev > 15 or edge_pixels > 20
                 piece_presence.append(has_piece)
 
         # Update buffers
@@ -54,6 +54,8 @@ class chess_logic:
 
         # Detect move
         move = self._detect_move(self.prev_state, curr_state)
+        
+
         self.prev_state = curr_state.copy()
 
         if debug:

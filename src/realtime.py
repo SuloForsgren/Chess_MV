@@ -47,7 +47,7 @@ def draw_grid(img, rows=8, cols=8, color=(0, 255, 0), thickness=2):
 def is_blurry(image, threshold):
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     lap = cv.Laplacian(gray, cv.CV_64F).var()
-    print(lap)
+    #print(lap)
     return lap < threshold
 
 def detect_playarea(capture, squares):
@@ -142,7 +142,7 @@ def detect_playarea(capture, squares):
                             cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
             
             cv.imshow("Annotated Chessboard", annotated)
-            print("Found playarea")
+            #print("Found playarea")
             return True
 
     except Exception as e:
@@ -166,7 +166,7 @@ def main():
         if playarea_detected == False :
             playarea_detected = detect_playarea(capture, squares)
         elif playarea_detected == True :
-            move = chess_helper.check_board(squares, debug=True)
+            move = chess_helper.check_board(squares, debug=False) # Debug mode prints the chess board to the console
             if move:
                 print(f"\nDetected move: {move}")
             playarea_detected = False
